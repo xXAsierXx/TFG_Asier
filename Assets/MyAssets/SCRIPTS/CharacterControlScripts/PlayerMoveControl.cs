@@ -85,29 +85,46 @@ public class PlayerMoveControl : MonoBehaviour
 
     void Update()
     {
-        // 1. GESTIÓN DE SUELO, GRAVEDAD Y CAÍDAS
-        if (controller.isGrounded)
+        // Creamos una variable local inteligente para el suelo
+        bool isGrounded = controller.isGrounded;
+
+        // ASISTENCIA EN RAMPAS: Si el componente dice que flotamos, pero veníamos de estar en el suelo y vamos hacia abajo...
+        if (!isGrounded && wasGrounded && velocity.y <= 0)
         {
-            // DETECCIÓN DE ATERRIZAJE: Si en el frame anterior estaba en el aire y ahora toca el suelo
+            Vector3 rayOrigin = transform.position + controller.center;
+            // Calculamos la distancia desde el centro del personaje hasta sus pies + un pequeño margen extra para buscar la rampa
+            float rayDistance = (controller.height / 2f) + 0.6f;
+
+            // Lanzamos un rayo invisible hacia abajo. Si golpea suelo, es una rampa, no una caída libre.
+            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, rayDistance))
+            {
+                isGrounded = true;
+                // Le aplicamos una fuerza vertical hacia abajo para "pegarlo" magnéticamente a la rampa
+                velocity.y = -7f; 
+            }
+        }
+
+        // 1. GESTIÓN DE SUELO, GRAVEDAD Y CAÍDAS (Usando nuestro suelo inteligente)
+        if (isGrounded)
+        {
+            // DETECCIÓN DE ATERRIZAJE: Solo si realmente estuvo en el aire de verdad (ej. un salto o un acantilado)
             if (!wasGrounded && velocity.y < landVelocityThreshold)
             {
                 if (audioSource != null && landSound != null)
                 {
-                    // Configuramos los parámetros físicos del impacto y lo reproducimos
                     audioSource.clip = landSound;
                     audioSource.volume = landVolume;
                     audioSource.maxDistance = landMaxDistance;
                     audioSource.Play();
                 }
 
-                // Colocamos un margen en el temporizador para que no se pisen 
-                // el sonido del impacto de caída y el primer paso inmediato en el suelo
                 footstepTimer = Input.GetKey(KeyCode.LeftShift) ? sprintStepInterval : walkStepInterval;
             }
 
+            // Subimos la fuerza base de -2f a -5f para que tenga un mejor agarre natural en pendientes suaves
             if (velocity.y < 0)
             {
-                velocity.y = -2f; 
+                velocity.y = -5f; 
             }
         }
 
@@ -140,8 +157,8 @@ public class PlayerMoveControl : MonoBehaviour
             playerCamera.localPosition = new Vector3(playerCamera.localPosition.x, newCamY, newCamZ);
         }
 
-        // 3. SALTO
-        if (Input.GetKeyDown(KeyCode.Space) && controller.isGrounded && !isCrouched)
+        // 3. SALTO (Usando nuestro suelo inteligente)
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded && !isCrouched)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
 
@@ -185,8 +202,8 @@ public class PlayerMoveControl : MonoBehaviour
 
             horizontalMovement = (transform.right * direction.x + transform.forward * direction.z) * currentSpeed;
 
-            // GESTIÓN DE AUDIO DINÁMICO (Caminar o Correr en el suelo)
-            if (controller.isGrounded && (isWalking || isSprinting))
+            // GESTIÓN DE AUDIO DINÁMICO (Usando nuestro suelo inteligente)
+            if (isGrounded && (isWalking || isSprinting))
             {
                 AudioClip targetClip = isSprinting ? sprintSound : walkSound;
                 float targetInterval = isSprinting ? sprintStepInterval : walkStepInterval;
@@ -202,7 +219,6 @@ public class PlayerMoveControl : MonoBehaviour
                         audioSource.clip = targetClip;
                         audioSource.volume = targetVolume;
                         audioSource.maxDistance = targetDistance;
-                        
                         audioSource.Play();
                     }
                     footstepTimer = targetInterval;
@@ -210,7 +226,6 @@ public class PlayerMoveControl : MonoBehaviour
             }
             else
             {
-                // Si está en el aire (saltando/cayendo), no deben sonar pasos
                 DetenerAudioPasos();
             }
         }
@@ -226,26 +241,24 @@ public class PlayerMoveControl : MonoBehaviour
         Vector3 finalMovement = horizontalMovement + velocity;
         controller.Move(finalMovement * Time.deltaTime);
 
-        // 8. ENVIAR VALORES AL ANIMATOR
+        // 8. ENVIAR VALORES AL ANIMATOR (Usando nuestro suelo inteligente)
         if (animator != null)
         {
-            animator.SetBool("isGrounded", controller.isGrounded);
+            animator.SetBool("isGrounded", isGrounded);
             animator.SetBool("isCrouched", isCrouched);
             
             float currentAnimSpeed = animator.GetFloat("Speed");
             animator.SetFloat("Speed", Mathf.MoveTowards(currentAnimSpeed, animSpeed, Time.deltaTime * 5f));
         }
 
-        // Al final del Update, recordamos si estábamos en el suelo para el próximo frame
-        wasGrounded = controller.isGrounded;
+        // Guardamos el estado del suelo corregido para el siguiente frame
+        wasGrounded = isGrounded;
     }
 
     void DetenerAudioPasos()
     {
         if (audioSource != null && audioSource.isPlaying)
         {
-            // Solo detenemos si lo que está sonando es el audio de caminar o correr 
-            // (así permitimos que el sonido de aterrizaje termine de reproducirse entero si nos paramos)
             if (audioSource.clip == walkSound || audioSource.clip == sprintSound)
             {
                 audioSource.Stop();
