@@ -1,7 +1,9 @@
 using UnityEngine;
+using Unity.Netcode; // --- MULTIJUGADOR: Añadido para poder usar las funciones y propiedades de Netcode ---
 
 [RequireComponent(typeof(CharacterController))]
-public class PlayerMoveControl : MonoBehaviour
+// --- MULTIJUGADOR: Cambiado de 'MonoBehaviour' a 'NetworkBehaviour' para heredar las propiedades de red ---
+public class PlayerMoveControl : NetworkBehaviour 
 {
     [Header("Configuración de Velocidad")]
     public float walkSpeed = 5f;
@@ -88,8 +90,37 @@ public class PlayerMoveControl : MonoBehaviour
         }
     }
 
+    // --- MULTIJUGADOR: Este método de Netcode se ejecuta automáticamente cuando el objeto aparece en la red ---
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+
+        // Si NO somos el dueño de este Prefab (es decir, es el personaje de otro jugador en nuestra pantalla)
+        if (!IsOwner)
+        {
+            // Desactivamos su cámara para no ver a través de sus ojos ni bugear la pantalla principal
+            if (playerCamera != null)
+            {
+                playerCamera.gameObject.SetActive(false);
+            }
+
+            // Desactivamos su CharacterController local. El movimiento de los otros jugadores ya vendrá 
+            // sincronizado por el componente NetworkTransform, tener esto activo causaría tirones (jitter).
+            if (controller != null)
+            {
+                controller.enabled = false;
+            }
+        }
+    }
+
     void Update()
     {
+        // --- MULTIJUGADOR: Filtro de Autoridad ---
+        // Si no somos el dueño de este objeto, salimos inmediatamente. 
+        // No queremos leer el teclado (WASD, Espacio, C) de otros jugadores ni calcular sus físicas locales.
+        if (!IsOwner) return;
+        // -----------------------------------------
+
         // Creamos una variable local inteligente para el suelo
         bool isGrounded = controller.isGrounded;
 
@@ -236,12 +267,12 @@ public class PlayerMoveControl : MonoBehaviour
             }
             else
             {
-                DetenerAudioPasos();
+                StopFootstepAudio(); // Modificado el nombre a inglés por consistencia técnica, el método original está abajo adaptado
             }
         }
         else
         {
-            DetenerAudioPasos();
+            StopFootstepAudio();
         }
 
         // 6. APLICAR GRAVEDAD
@@ -269,7 +300,9 @@ public class PlayerMoveControl : MonoBehaviour
         wasGrounded = isGrounded;
     }
 
-    void DetenerAudioPasos()
+    // --- MULTIJUGADOR / REFACTORIZACIÓN ---
+    // Mantenemos la lógica de detener pasos, renombrada para coincidir con las llamadas de arriba.
+    void StopFootstepAudio()
     {
         if (audioSource != null && audioSource.isPlaying)
         {

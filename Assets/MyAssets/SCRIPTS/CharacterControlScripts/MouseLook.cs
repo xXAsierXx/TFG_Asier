@@ -1,6 +1,8 @@
 using UnityEngine;
+using Unity.Netcode; // --- MULTIJUGADOR: Añadido para Netcode ---
 
-public class MouseLook : MonoBehaviour
+// --- MULTIJUGADOR: Cambiado de 'MonoBehaviour' a 'NetworkBehaviour' ---
+public class MouseLook : NetworkBehaviour
 {
     [Header("Configuración de Sensibilidad")]
     public float mouseSensitivity = 100f;
@@ -12,12 +14,25 @@ public class MouseLook : MonoBehaviour
 
     void Start()
     {
-        // Bloquea el ratón en el centro de la pantalla y lo oculta para que no moleste
         Cursor.lockState = CursorLockMode.Locked;
+
+        // --- SOLUCIÓN AUTOMÁTICA DE REFERENCIA ---
+        // Si no has arrastrado el PlayerBody en el inspector, lo buscamos en la raíz del prefab
+        if (playerBody == null)
+        {
+            playerBody = transform.root; 
+            // transform.root viaja hacia arriba en la jerarquía hasta encontrar el objeto padre definitivo (tu Player)
+        }
     }
 
     void Update()
     {
+        // --- MULTIJUGADOR: Filtro de Autoridad ---
+        // Si esta cámara o este objeto no nos pertenece, salimos inmediatamente.
+        // No queremos que el ratón de otro jugador mueva nuestra vista ni nuestro cuerpo.
+        if (!IsOwner) return;
+        // -----------------------------------------
+
         // 1. Capturar el movimiento del ratón
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
@@ -31,6 +46,9 @@ public class MouseLook : MonoBehaviour
         transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
         // 3. Rotar el cuerpo del personaje de izquierda a derecha (Eje Y)
-        playerBody.Rotate(Vector3.up * mouseX);
+        if (playerBody != null)
+        {
+            playerBody.Rotate(Vector3.up * mouseX);
+        }
     }
 }
