@@ -13,7 +13,7 @@ public class PlayerMoveControl : MonoBehaviour
     public float jumpHeight = 2f;
     private Vector3 velocity;
 
-    [Header("Configuración de Agachado (Altura Y)")]
+    [Header("Configuración de Agachado (Altura Y)")] //Offset de la camara agachado
     public Transform playerCamera;     
     public float standingHeight = 2f;  
     public float crouchHeight = 1f;    
@@ -21,22 +21,22 @@ public class PlayerMoveControl : MonoBehaviour
     public float crouchCamY = 0.8f;    
     public float crouchSmoothTime = 8f; 
     
-    [Header("Ajustes de Offset Frontal (Distancia Z)")]
+    [Header("Ajustes de Offset Frontal (Distancia Z)")] //Offset de la camara adelantada (De pie / Agachado)
     public float standingForwardOffset = 0.0f; 
     public float crouchForwardOffset = 0.25f; 
 
     [Header("Configuración de Audio")]
-    public AudioSource audioSource;       // El componente altavoz del Player
+    public AudioSource audioSource;
     
     [Space(5)]
-    public AudioClip walkSound;          // Tu archivo "Walk audio"
+    public AudioClip walkSound;          // archivo "Walk audio"
     [Tooltip("Tiempo en segundos entre cada pisada al caminar.")]
     public float walkStepInterval = 0.5f; 
     [Range(0f, 1f)] public float walkVolume = 0.4f; 
     public float walkMaxDistance = 10f;             
     
     [Space(5)]
-    public AudioClip sprintSound;        // Tu archivo de audio para correr
+    public AudioClip sprintSound;        // archivo de audio para correr
     [Tooltip("Tiempo en segundos entre cada pisada al correr.")]
     public float sprintStepInterval = 0.3f; 
     [Range(0f, 1f)] public float sprintVolume = 0.9f; 
@@ -44,13 +44,18 @@ public class PlayerMoveControl : MonoBehaviour
 
     [Space(5)]
     [Header("Sonido de Aterrizaje")]
-    public AudioClip landSound;          // Tu archivo de audio para cuando cae al suelo
-    [Range(0f, 1f)] public float landVolume = 0.7f;   // Volumen del impacto
+    public AudioClip landSound;          // archivo de audio para cuando cae al suelo
+    [Range(0f, 1f)] public float landVolume = 0.7f;   // volumen del impacto
     public float landMaxDistance = 20f;               // Distancia en metros que alcanza el sonido de caída
-    [Tooltip("Velocidad de caída mínima para activar el sonido. Evita que suene al bajar rampas.")]
+    [Tooltip("Velocidad de caída mínima para activar el sonido.")]
     public float landVelocityThreshold = -4f; 
 
-    private float footstepTimer = 0f;     // Temporizador interno
+    [Header("Filtro de Pequeños Obstáculos (Piedras/Baches)")]
+    [Tooltip("Tiempo mínimo (en segundos) que el jugador debe estar en el aire para considerarse una caída real. Evita ruidos y animaciones en piedras.")]
+    public float miniBumpThreshold = 0.2f; // tiempo que esta en el aire sin animacion
+
+    private float footstepTimer = 0f;     // Temporizador interno interno para pasos
+    private float airTimer = 0f;          // Temporizador para medir cuánto tiempo real lleva flotando
     private bool wasGrounded = true;      // Guarda el estado del suelo del frame anterior
 
     private bool isCrouched = false;
@@ -92,23 +97,20 @@ public class PlayerMoveControl : MonoBehaviour
         if (!isGrounded && wasGrounded && velocity.y <= 0)
         {
             Vector3 rayOrigin = transform.position + controller.center;
-            // Calculamos la distancia desde el centro del personaje hasta sus pies + un pequeño margen extra para buscar la rampa
             float rayDistance = (controller.height / 2f) + 0.6f;
 
-            // Lanzamos un rayo invisible hacia abajo. Si golpea suelo, es una rampa, no una caída libre.
             if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, rayDistance))
             {
                 isGrounded = true;
-                // Le aplicamos una fuerza vertical hacia abajo para "pegarlo" magnéticamente a la rampa
-                velocity.y = -7f; 
+                velocity.y = -5f; // Fuerza de pegado a la rampa
             }
         }
 
-        // 1. GESTIÓN DE SUELO, GRAVEDAD Y CAÍDAS (Usando nuestro suelo inteligente)
+        // 1. GESTIÓN DE SUELO, GRAVEDAD Y CAÍDAS
         if (isGrounded)
         {
-            // DETECCIÓN DE ATERRIZAJE: Solo si realmente estuvo en el aire de verdad (ej. un salto o un acantilado)
-            if (!wasGrounded && velocity.y < landVelocityThreshold)
+            // DETECCIÓN DE ATERRIZAJE REAL: Solo si estuvo en el aire más tiempo que el umbral de baches (miniBumpThreshold)
+            if (!wasGrounded && airTimer > miniBumpThreshold && velocity.y < landVelocityThreshold)
             {
                 if (audioSource != null && landSound != null)
                 {
@@ -121,11 +123,19 @@ public class PlayerMoveControl : MonoBehaviour
                 footstepTimer = Input.GetKey(KeyCode.LeftShift) ? sprintStepInterval : walkStepInterval;
             }
 
-            // Subimos la fuerza base de -2f a -5f para que tenga un mejor agarre natural en pendientes suaves
+            // Reseteamos el contador de tiempo en el aire ya que estamos tocando el suelo
+            airTimer = 0f;
+
+            // Bajamos esto a -2f para que la velocidad base en el suelo no interfiera con el umbral de caída de -4f
             if (velocity.y < 0)
             {
-                velocity.y = -5f; 
+                velocity.y = -2f; 
             }
+        }
+        else
+        {
+            // Si no está en el suelo, acumulamos el tiempo que lleva flotando
+            airTimer += Time.deltaTime;
         }
 
         // 2. CONTROL DEL AGACHADO (Tecla C)
@@ -157,7 +167,7 @@ public class PlayerMoveControl : MonoBehaviour
             playerCamera.localPosition = new Vector3(playerCamera.localPosition.x, newCamY, newCamZ);
         }
 
-        // 3. SALTO (Usando nuestro suelo inteligente)
+        // 3. SALTO
         if (Input.GetKeyDown(KeyCode.Space) && isGrounded && !isCrouched)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
@@ -202,7 +212,7 @@ public class PlayerMoveControl : MonoBehaviour
 
             horizontalMovement = (transform.right * direction.x + transform.forward * direction.z) * currentSpeed;
 
-            // GESTIÓN DE AUDIO DINÁMICO (Usando nuestro suelo inteligente)
+            // GESTIÓN DE AUDIO DINÁMICO
             if (isGrounded && (isWalking || isSprinting))
             {
                 AudioClip targetClip = isSprinting ? sprintSound : walkSound;
@@ -241,10 +251,14 @@ public class PlayerMoveControl : MonoBehaviour
         Vector3 finalMovement = horizontalMovement + velocity;
         controller.Move(finalMovement * Time.deltaTime);
 
-        // 8. ENVIAR VALORES AL ANIMATOR (Usando nuestro suelo inteligente)
+        // 8. ENVIAR VALORES AL ANIMATOR
         if (animator != null)
         {
-            animator.SetBool("isGrounded", isGrounded);
+            // FILTRO PARA EL ANIMATOR: Solo le diremos que "no está en el suelo" si lleva flotando 
+            // más tiempo que nuestro umbral (miniBumpThreshold). Así evitamos animaciones de caída en piedras.
+            bool sendGroundedToAnimator = isGrounded || (airTimer < miniBumpThreshold);
+            
+            animator.SetBool("isGrounded", sendGroundedToAnimator);
             animator.SetBool("isCrouched", isCrouched);
             
             float currentAnimSpeed = animator.GetFloat("Speed");
