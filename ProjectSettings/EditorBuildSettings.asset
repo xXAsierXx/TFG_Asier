@@ -17,6 +17,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/MyAssets/SCENES/PLAY SCENES/MAPA BOSQUE.unity
     guid: 6bdef3a91afdda543b873f3e0aacaee7
+  - enabled: 1
+    path: Assets/MyAssets/SCENES/MENU/Escena Incial.unity
+    guid: f7748901ce4061c4ba3c610cf127200b
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
