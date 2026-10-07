@@ -1,32 +1,32 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro; // Necesario para la caja de texto de TextMeshPro
+using TMPro;
 using Unity.Netcode;
-using Unity.Netcode.Transports.UTP; // <--- NECESARIO PARA CAMBIAR LA IP
+using Unity.Netcode.Transports.UTP;
+using UnityEngine.SceneManagement; // Necesario si quieres referencias de escenas
 
 public class MenuController : MonoBehaviour
 {
     [Header("Paneles de los Menús")]
-    public GameObject firstMenu; // Tu objeto "FirstMenu"
-    public GameObject joinMenu;  // Tu objeto "JoinMenu"
+    public GameObject firstMenu;
+    public GameObject joinMenu;
 
     [Header("Elementos del Segundo Menú")]
     public Button hostButton;
     public Button clientButton;
-    public TMP_InputField ipInputField; // La caja de texto (asegúrate de que sea TMP_InputField)
-    public GameObject finalJoinButton;  // El botón "JOIN" del segundo menú (lo tratamos como GameObject para ocultarlo/mostrarlo)
-    public NetworkManager networkManager; // Objeto NetworkManager
+    public TMP_InputField ipInputField;
+    public GameObject finalJoinButton;
+    public NetworkManager networkManager;
 
-    // Variables internas para saber qué hemos elegido
+    [Header("Nombre de la Escena de Selección")]
+    [SerializeField] private string mapSelectionSceneName = "Seleccion Mapa";
+
     private bool isHostSelected = false;
     private bool isClientSelected = false;
 
     void Start()
     {
-        // Al darle al Play, nos aseguramos de que empiece en el menú 1
         MostrarFirstMenu();
-
-        // Le decimos a la caja de texto que nos avise cada vez que escribamos una letra
         ipInputField.onValueChanged.AddListener(AlEscribirIP);
     }
 
@@ -38,13 +38,12 @@ public class MenuController : MonoBehaviour
         joinMenu.SetActive(false);
     }
 
-    public void MostrarJoinMenu() // Esta irá en el botón JOIN del primer menú
+    public void MostrarJoinMenu()
     {
         Debug.Log("¡El botón Join ha sido pulsado!");
         firstMenu.SetActive(false);
         joinMenu.SetActive(true);
 
-        // Reiniciamos el menú 2 para que empiece limpio
         ReiniciarJoinMenu();
     }
 
@@ -53,46 +52,37 @@ public class MenuController : MonoBehaviour
         isHostSelected = false;
         isClientSelected = false;
 
-        // Dejamos ambos botones "clicables"
         hostButton.interactable = true;
         clientButton.interactable = true;
 
-        // Ocultamos la caja de texto y el botón JOIN final
         ipInputField.gameObject.SetActive(false);
-        ipInputField.text = ""; // Limpiamos la IP por si había algo escrito antes
+        ipInputField.text = "";
         finalJoinButton.SetActive(false);
     }
 
     // --- FUNCIONES DE LOS BOTONES HOST Y CLIENT ---
 
-    public void SeleccionarHost() // Esta irá en el botón HOST
+    public void SeleccionarHost()
     {
         isHostSelected = true;
         isClientSelected = false;
 
-        // Para que no estén los dos seleccionados a la vez, desactivamos la interacción del que hemos pulsado
-        // (Visualmente se verá más oscuro o presionado, indicando que es la opción elegida)
         hostButton.interactable = false;
         clientButton.interactable = true;
 
-        // Lógica visual:
-        ipInputField.gameObject.SetActive(false); // Ocultamos la IP porque el Host no la necesita
-        finalJoinButton.SetActive(true);          // Mostramos el botón JOIN directamente
+        ipInputField.gameObject.SetActive(false);
+        finalJoinButton.SetActive(true);
     }
 
-    public void SeleccionarClient() // Esta irá en el botón CLIENT
+    public void SeleccionarClient()
     {
         isHostSelected = false;
         isClientSelected = true;
 
-        // Bloqueamos este botón y liberamos el de Host
         hostButton.interactable = true;
         clientButton.interactable = false;
 
-        // Lógica visual:
-        ipInputField.gameObject.SetActive(true); // Aparece la caja para meter la IP
-        
-        // Comprobamos si ya hay una IP escrita para mostrar u ocultar el botón JOIN
+        ipInputField.gameObject.SetActive(true);
         ComprobarBotonJoin(ipInputField.text);
     }
 
@@ -100,7 +90,6 @@ public class MenuController : MonoBehaviour
 
     private void AlEscribirIP(string texto)
     {
-        // Si estamos en modo Cliente, comprobamos la IP cada vez que el jugador teclea algo
         if (isClientSelected)
         {
             ComprobarBotonJoin(texto);
@@ -109,7 +98,6 @@ public class MenuController : MonoBehaviour
 
     private void ComprobarBotonJoin(string texto)
     {
-        // Si el texto NO está vacío, mostramos el botón JOIN. Si está vacío, lo ocultamos.
         if (!string.IsNullOrEmpty(texto))
         {
             finalJoinButton.SetActive(true);
@@ -120,26 +108,42 @@ public class MenuController : MonoBehaviour
         }
     }
 
-    public void BotonJoinFinalPulsado() // Boton que lleva a la partida
+    // --- CONEXIÓN Y CAMBIO DE ESCENA ---
+
+    public void BotonJoinFinalPulsado()
     {
         if (isHostSelected)
         {
-            // EL HOST INICIA EL SERVIDOR
-            networkManager.StartHost();
-            Debug.Log("Partida creada como HOST");
+            // 1. EL HOST INICIA EL SERVIDOR Y CREA LA PARTIDA
+            if (networkManager.StartHost())
+            {
+                Debug.Log("Host iniciado con éxito. Cargando escena de Selección de Mapa...");
+                
+                // 2. EL HOST CARGA LA ESCENA MEDIANTE EL SCENEMANAGER DE NETCODE
+                // Esto hará que el Host cambie de escena y que cualquier cliente que se conecte sea teletransportado a ella.
+                NetworkManager.Singleton.SceneManager.LoadScene(mapSelectionSceneName, LoadSceneMode.Single);
+            }
+            else
+            {
+                Debug.LogError("Error al iniciar el Host.");
+            }
         }
         else if (isClientSelected)
         {
             // EL CLIENTE CONFIGURA LA IP Y SE UNE
             var transport = networkManager.GetComponent<UnityTransport>();
-            transport.ConnectionData.Address = ipInputField.text; // Toma la IP del campo de texto
             
+            // Asignamos la IP introducida
+            string ipAddress = string.IsNullOrWhiteSpace(ipInputField.text) ? "127.0.0.1" : ipInputField.text;
+            transport.ConnectionData.Address = ipAddress;
+            
+            Debug.Log("Intentando conectar como CLIENTE a: " + ipAddress);
             networkManager.StartClient();
-            Debug.Log("Intentando conectar como CLIENTE a: " + ipInputField.text);
+
+            // NOTA: No hace falta llamar a LoadScene aquí. 
+            // Netcode sincroniza automáticamente la escena del Host en cuanto el Cliente se conecta.
         }
     }
-
-    // --- BOTÓN PARA SALIR DEL JUEGO ---
 
     public void SalirDelJuego()
     {
