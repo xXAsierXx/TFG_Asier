@@ -5,14 +5,20 @@ using TMPro;
 using Unity.Netcode;
 using UnityEngine.SceneManagement;
 
+/// <summary>
+/// Gestiona la pantalla de selección y votación de mapas.
+/// Selecciona 2 mapas aleatorios de un total de 3 disponibles, sincroniza los votos 
+/// y el temporizador en tiempo real entre todos los jugadores conectados.
+/// </summary>
 public class MapSelectionManager : NetworkBehaviour
 {
+    // ESTRUCTURA DE DATOS: Permite definir la información de cada mapa en el Inspector de Unity
     [System.Serializable]
     public struct MapData
     {
-        public string mapName;          // Nombre que se mostrará en pantalla
+        public string mapName;          // Nombre visible del mapa en el menú (ej: "Mapa Cyberpunk")
         public string sceneName;        // Nombre exacto de la escena en Build Settings
-        public Sprite mapPreview;       // Imagen del mapa
+        public Sprite mapPreview;       // Imagen/Miniatura del mapa
     }
 
     [Header("Lista de Mapas Totales (Los 3 mapas del juego)")]
@@ -34,42 +40,48 @@ public class MapSelectionManager : NetworkBehaviour
     public TMP_Text timerText;
 
     [Header("Configuración de Tiempo")]
-    public float votingTime = 15f;
+    public float votingTime = 15f; // Tiempo en segundos para la votación
 
-    // --- VARIABLES RED SINCRONIZADAS ---
-    // Guardan el índice del mapa elegido del array allMaps (0, 1 o 2)
+    // --- VARIABLES DE RED SINCRONIZADAS (NetworkVariables) ---
+    // Guardan el índice del mapa elegido dentro del array 'allMaps' (-1 significa no asignado)
     private NetworkVariable<int> map1Index = new NetworkVariable<int>(-1);
     private NetworkVariable<int> map2Index = new NetworkVariable<int>(-1);
 
-    // Contadores de votos
+    // Contadores de votos sincronizados
     private NetworkVariable<int> map1Votes = new NetworkVariable<int>(0);
     private NetworkVariable<int> map2Votes = new NetworkVariable<int>(0);
 
-    // Temporizador
+    // Tiempo restante sincronizado
     private NetworkVariable<float> timeRemaining = new NetworkVariable<float>(15f);
 
-    // Diccionario interno del servidor para rastrear qué ha votado cada jugador (ClientId)
+    // Diccionario exclusivo del servidor: guarda qué opción (1 o 2) ha votado cada jugador según su ID
     private Dictionary<ulong, int> playerVotes = new Dictionary<ulong, int>();
+    
+    // Evita que se ordene cargar la escena más de una vez cuando se acaba el tiempo
     private bool gameStarting = false;
 
+    /// <summary>
+    /// Se ejecuta automáticamente cuando el objeto se activa en la red (tanto en Host como en Clientes).
+    /// </summary>
     public override void OnNetworkSpawn()
     {
-        // 1. Suscribir eventos de red para actualizar la UI en TODOS los clientes automáticamente
+        // 1. Nos suscribimos a los cambios de las variables de red para actualizar la UI en vivo
         map1Votes.OnValueChanged += (prev, current) => ActualizarTextosVotos();
         map2Votes.OnValueChanged += (prev, current) => ActualizarTextosVotos();
         timeRemaining.OnValueChanged += (prev, current) => ActualizarTimerUI(current);
 
+        // Cuando la red elija los mapas, actualizamos su imagen y nombre en la interfaz de todos
         map1Index.OnValueChanged += (prev, current) => ActualizarOpcionMapaUI(1, current);
         map2Index.OnValueChanged += (prev, current) => ActualizarOpcionMapaUI(2, current);
 
-        // 2. Si soy el HOST / SERVIDOR, elijo 2 mapas aleatorios de los 3 disponibles
+        // 2. Lógica ejecutada ÚNICAMENTE por el HOST/SERVIDOR al iniciar la sala
         if (IsServer)
         {
             timeRemaining.Value = votingTime;
             ElegirDosMapasAleatorios();
         }
 
-        // Si los valores ya estaban asignados (por si un cliente entra tarde), actualizamos UI
+        // 3. Si un cliente entra cuando las variables ya tienen valor, actualiza su interfaz
         if (map1Index.Value != -1) ActualizarOpcionMapaUI(1, map1Index.Value);
         if (map2Index.Value != -1) ActualizarOpcionMapaUI(2, map2Index.Value);
         ActualizarTextosVotos();
@@ -77,34 +89,49 @@ public class MapSelectionManager : NetworkBehaviour
 
     private void Update()
     {
-        // Solo el Host ejecuta la cuenta atrás
+        // Solo el Servidor se encarga de reducir la cuenta atrás del temporizador
         if (!IsServer || gameStarting) return;
 
         timeRemaining.Value -= Time.deltaTime;
 
+        // Cuando el contador llega a cero, finaliza la votación y se carga el mapa ganador
         if (timeRemaining.Value <= 0f)
         {
             timeRemaining.Value = 0f;
             gameStarting = true;
             CargarMapaGanador();
         }
+
+ 
+        if (Input.GetMouseButtonDown(0))
+        {
+            Debug.Log("Clic detectado en pantalla");
+        }
+
     }
 
-    // --- SELECCIÓN ALEATORIA DE MAPAS (SOLO HOST) ---
+    /// <summary>
+    /// Selecciona aleatoriamente 2 índices únicos entre 0, 1 y 2 (los 3 mapas disponibles).
+    /// </summary>
     private void ElegirDosMapasAleatorios()
     {
         List<int> indices = new List<int> { 0, 1, 2 };
         
+        // Seleccionamos el primer mapa y lo sacamos de la lista
         int firstChoice = indices[Random.Range(0, indices.Count)];
         indices.Remove(firstChoice);
         
+        // Seleccionamos el segundo mapa entre los restantes
         int secondChoice = indices[Random.Range(0, indices.Count)];
 
+        // Al cambiar .Value, Netcode propaga automáticamente el cambio a todos los clientes
         map1Index.Value = firstChoice;
         map2Index.Value = secondChoice;
     }
 
-    // --- ACTUALIZACIÓN DE UI EN CLIENTES ---
+    /// <summary>
+    /// Muestra la imagen y el nombre del mapa correspondiente en la interfaz gráfica.
+    /// </summary>
     private void ActualizarOpcionMapaUI(int optionNumber, int mapDataIndex)
     {
         if (mapDataIndex < 0 || mapDataIndex >= allMaps.Length) return;
@@ -123,12 +150,18 @@ public class MapSelectionManager : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Refresca los contadores de votos en la pantalla de todos los jugadores.
+    /// </summary>
     private void ActualizarTextosVotos()
     {
         if (map1VotesText != null) map1VotesText.text = $"Votos: {map1Votes.Value}";
         if (map2VotesText != null) map2VotesText.text = $"Votos: {map2Votes.Value}";
     }
 
+    /// <summary>
+    /// Muestra el tiempo restante redondeado en la pantalla.
+    /// </summary>
     private void ActualizarTimerUI(float newTime)
     {
         if (timerText != null)
@@ -137,47 +170,59 @@ public class MapSelectionManager : NetworkBehaviour
         }
     }
 
-    // --- MÉTODOS DE VOTACIÓN (PULSACIÓN DE BOTONES) ---
+    // --- MÉTODOS PÚBLICOS ASIGNADOS A LOS BOTONES DE LA UI ---
 
     public void VotarMapa1()
     {
-        VotarServidorServerRpc(1);
+        Debug.Log("¡Botón Mapa 1 pulsado localmente!");
+        VotarServidorRpc(1);
     }
 
     public void VotarMapa2()
     {
-        VotarServidorServerRpc(2);
+        Debug.Log("¡Botón Mapa 2 pulsado localmente!");
+        VotarServidorRpc(2);
     }
 
-    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)] //Cualquiera aunque no sea su dueño (Ownership) puede enviar su votacion
+    /// <summary>
+    /// RPC que se ejecuta en el Servidor cuando un jugador pulsa un botón.
+    /// [Rpc(SendTo.Server)] indica que la llamada viaja del Cliente al Servidor.
+    /// InvokePermission.Everyone permite que cualquier jugador conectado vote sin ser el dueño del objeto.
+    /// </summary>
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void VotarServidorRpc(int optionSelected, RpcParams rpcParams = default)
     {
+        // Obtenemos la ID única del jugador que ha pulsado el botón
         ulong senderId = rpcParams.Receive.SenderClientId;
 
-        // Si el jugador ya había votado antes, le restamos el voto anterior
+        // Comprobamos si el jugador ya había votado antes para cambiar su voto
         if (playerVotes.ContainsKey(senderId))
         {
             int previousVote = playerVotes[senderId];
             if (previousVote == 1) map1Votes.Value--;
             else if (previousVote == 2) map2Votes.Value--;
-        
+            
             playerVotes[senderId] = optionSelected;
         }
         else
         {
+            // Registramos el voto inicial del jugador
             playerVotes.Add(senderId, optionSelected);
         }
 
-        // Sumar el voto a la nueva opción
+        // Sumamos el voto a la opción seleccionada
         if (optionSelected == 1) map1Votes.Value++;
         else if (optionSelected == 2) map2Votes.Value++;
     }
 
-    // --- FIN DE VOTACIÓN Y CARGA DE LA PARTIDA ---
+    /// <summary>
+    /// Evalúa el mapa ganador y utiliza la carga de escenas sincronizada de Netcode.
+    /// </summary>
     private void CargarMapaGanador()
     {
         int winningMapDataIndex;
 
+        // Si hay empate o la Opción 1 tiene más votos, gana la Opción 1
         if (map1Votes.Value >= map2Votes.Value)
         {
             winningMapDataIndex = map1Index.Value;
@@ -190,7 +235,7 @@ public class MapSelectionManager : NetworkBehaviour
         string sceneToLoad = allMaps[winningMapDataIndex].sceneName;
         Debug.Log($"¡Votación finalizada! Cargando mapa ganador: {allMaps[winningMapDataIndex].mapName} ({sceneToLoad})");
 
-        // El Host carga la escena seleccionada para todos
+        // El Host ordena a Netcode cargar la escena seleccionada para TODOS los clientes conectados
         NetworkManager.Singleton.SceneManager.LoadScene(sceneToLoad, LoadSceneMode.Single);
     }
 }

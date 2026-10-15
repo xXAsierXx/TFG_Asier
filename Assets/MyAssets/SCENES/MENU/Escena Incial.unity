@@ -3111,7 +3111,7 @@ MonoBehaviour:
   NetworkConfig:
     ProtocolVersion: 0
     NetworkTransport: {fileID: 1681920617}
-    PlayerPrefab: {fileID: 3874763644732733468, guid: 83b343aabc22f3643ae4379bb9f57fce, type: 3}
+    PlayerPrefab: {fileID: 0}
     Prefabs:
       NetworkPrefabsLists:
       - {fileID: 11400000, guid: 1dcf63cdea2f4e14b84e38224a582319, type: 2}
@@ -3353,6 +3353,7 @@ MonoBehaviour:
   ipInputField: {fileID: 878291308}
   finalJoinButton: {fileID: 515457527}
   networkManager: {fileID: 1681920618}
+  mapSelectionSceneName: Seleccion Mapa
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
