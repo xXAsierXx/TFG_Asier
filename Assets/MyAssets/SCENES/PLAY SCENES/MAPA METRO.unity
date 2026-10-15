@@ -22371,7 +22371,7 @@ MonoBehaviour:
   humanPrefab: {fileID: 7310639331371931865, guid: bab35670b9261ec419d355bc11d54f01, type: 3}
   aiPrefab: {fileID: 3862936956566997106, guid: 373242b69aaf6cd46bab63a0454598fa, type: 3}
   tiempoEscondite: 15
-  tiempoRonda: 120
+  tiempoRonda: 20
   rondaActual:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
@@ -43397,7 +43397,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bd82cc2cc0e2ccd4490f49df0f9c1160, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ShowTopMostFoldoutHeaderGroup: 1
   spawnAtrapados:
   - {fileID: 1684717364}
   - {fileID: 905701963}

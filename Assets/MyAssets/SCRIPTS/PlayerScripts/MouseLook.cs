@@ -32,7 +32,17 @@ public class MouseLook : NetworkBehaviour
         // No queremos que el ratón de otro jugador mueva nuestra vista ni nuestro cuerpo.
         if (!IsOwner) return;
         // -----------------------------------------
-
+        // ----- se bloquea la camara para no poder ver donde estan las IAs.
+        // --- BLOQUEO DE CÁMARA DURANTE ESCONDITE EN RONDA 2 ---
+        if (GameManager.Instance != null && GameManager.Instance.enFaseEscondite.Value)
+        {
+            // En la Ronda 2, el Humano es el Atrapador: No puede mover la cámara mientras se esconden las IAs
+            if (GameManager.Instance.rondaActual.Value == 2)
+            {
+                return;
+            }
+        }
+        //-----
         // 1. Capturar el movimiento del ratón
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;

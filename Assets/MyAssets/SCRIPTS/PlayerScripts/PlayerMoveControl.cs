@@ -120,7 +120,20 @@ public class PlayerMoveControl : NetworkBehaviour
         // No queremos leer el teclado (WASD, Espacio, C) de otros jugadores ni calcular sus físicas locales.
         if (!IsOwner) return;
         // -----------------------------------------
-
+        //------- Sirve para bloquear el moviemiento y no poder perseguir a las IAs cuando inicia la ronda.
+        // --- BLOQUEO DE MOVIMIENTO Y FÍSICAS DURANTE ESCONDITE EN RONDA 2 ---
+        if (GameManager.Instance != null && GameManager.Instance.enFaseEscondite.Value)
+        {
+            // En la Ronda 2, el Humano es el Atrapador: Se queda congelado en el spawn
+            if (GameManager.Instance.rondaActual.Value == 2)
+            {
+                // Opcional: poner animaciones en Idle
+                if (animator != null) animator.SetFloat("Speed", 0f);
+                return;
+            }
+        }
+        //------
+        // --------------------------------------------------------------------
         // Creamos una variable local inteligente para el suelo
         bool isGrounded = controller.isGrounded;
 
