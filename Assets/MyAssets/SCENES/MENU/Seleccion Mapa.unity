@@ -576,7 +576,7 @@ MonoBehaviour:
   map2VotesText: {fileID: 241994974}
   map2Button: {fileID: 2026798292}
   timerText: {fileID: 839001971}
-  votingTime: 50
+  votingTime: 20
 --- !u!114 &279075419
 MonoBehaviour:
   m_ObjectHideFlags: 0
